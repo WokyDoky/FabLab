@@ -86,39 +86,70 @@ can be found in "eyeTracking.py"
 
 
 ### 4.2. Code Explanation
-Constants:
-NECK_SERVO_PIN: Specifies the digital port (D2) for the head pivot servo.
-INITIAL_NECK_POS: The default starting position (94) for the neck pivot.
-NECK_SPEED: Sets the movement speed/acceleration for the neck servo.
-CAMERA_CENTER_X: Defines the target X-coordinate (160) for the camera's field of view. Note: Given a 30x240 pixel camera, the true horizontal center would be 120 if using the full width. This value might be based on a cropped image or specific calibration.
-TRACKING_THRESHOLD: The tolerance (70 pixels) for how far an object can be from CAMERA_CENTER_X before the neck moves.
-NECK_STEP_SIZE: The amount (10 units) the servo moves in each adjustment step.
-NECK_MIN_POS / NECK_MAX_POS: Defines the operational limits (42 to 100) for the neck pivot servo to prevent over-rotation.
-SLEEP_TIME: A pause (500 ms) after each servo movement to allow the physical movement to complete and prevent rapid, jerky motions.
-initialize_neck(pin, start_pos, speed) Function:
-This function is called once at startup.
-It sets the neck servo to its INITIAL_NECK_POS.
-Servo.WaitForPositionEquals() ensures the script waits until the servo has physically reached the target position before proceeding.
-It then sets the NECK_SPEED for subsequent movements.
-adjust_neck_for_tracking(pin, object_center_x) Function:
-This is the core logic for tracking.
-It calculates delta, the difference between the detected object's X-coordinate (object_center_x) and the desired CAMERA_CENTER_X.
-Movement Logic:
-If delta is less than -TRACKING_THRESHOLD (object is significantly to the left), the function attempts to move the neck to the right by NECK_STEP_SIZE (incrementing the servo position), provided it's not already at NECK_MAX_POS.
-If delta is greater than TRACKING_THRESHOLD (object is significantly to the right), it moves the neck to the left (decrementing servo position), provided it's not at NECK_MIN_POS.
-The original code comments noted a correction: "Swapped Increment/Decrement to fix direction issue." This means the current logic (incrementing to move right, decrementing to move left, assuming higher servo values mean "right") is the corrected version.
-sleep(SLEEP_TIME) is used after a movement command, replacing Servo.WaitForMove from potential earlier versions. This provides a simple delay.
-Main Program Logic:
-Calls initialize_neck() to set up the servo.
-Enters an infinite while True loop for continuous operation.
-Inside the loop, it checks getVar("$CameraIsTracking"). This implies an external system or variable that indicates if the camera's object detection is active.
-If tracking, it retrieves the object's X-coordinate using getVar("$CameraObjectCenterX").
-If obj_x is valid, it calls adjust_neck_for_tracking() to move the head.
-Includes a try...except KeyboardInterrupt block to allow the user to stop the script cleanly using Ctrl+C.
-5. Future Considerations and Todos
-Address jaw tolerance issues.
-Reinforce or redesign the nodding piston's screw holder.
-Carefully calibrate Left and Right Yaw neck servos due to differing position ranges.
-Verify CAMERA_CENTER_X constant against actual camera output and processing.
-Further refine TRACKING_THRESHOLD and NECK_STEP_SIZE for smoother tracking.
-Consider adding feedback or limits for eye servos in the tracking logic if they also participate
+This Python code is designed to control a servo motor, specifically a "neck" servo, to make a camera (or a device with a camera) automatically track a moving object. It does this by adjusting the neck's horizontal angle to keep the detected object in the center of the camera's view.
+
+#### 4.2.1. Function Definitions (`# --- Function Definitions ---`)
+
+#### `initialize_neck(pin, start_pos, speed)`
+
+* **Purpose**: This function sets up the neck servo at the beginning of the program.
+* **Parameters**:
+    * `pin`: The pin the servo is connected to.
+    * `start_pos`: The desired initial position.
+    * `speed`: The desired movement speed.
+* **Actions**:
+    * Prints an initialization message.
+    * `Servo.SetPosition(pin, start_pos)`: Sends a command to the servo library to move the servo on the specified `pin` to the `start_pos`. (This implies the existence of a `Servo` object or module with these methods).
+    * `Servo.WaitForPositionEquals(pin, start_pos)`: Pauses the execution of the script until the servo on the given `pin` reports that it has reached the `start_pos`. This ensures the servo is in place before proceeding.
+    * `Servo.SetSpeed(pin, speed)`: Sets the movement speed for the servo.
+    * Prints a confirmation message.
+
+#### `adjust_neck_for_tracking(pin, object_center_x)`
+
+* **Purpose**: This is the core logic for tracking. It determines if and how the neck servo should move based on the detected object's horizontal position.
+* **Parameters**:
+    * `pin`: The pin the servo is connected to.
+    * `object_center_x`: The current horizontal (x-coordinate) position of the center of the tracked object, as detected by the camera.
+* **Actions**:
+    1.  `delta = object_center_x - CAMERA_CENTER_X`: Calculates the "error" or difference between the object's current horizontal position and the desired center of the camera's view.
+        * A negative `delta` means the object is to the left of the center.
+        * A positive `delta` means the object is to the right of the center.
+        * A `delta` near zero means the object is centered.
+    2.  `current_pos = Servo.GetPosition(pin)`: Gets the current reported position of the servo.
+    3.  **Movement Logic**:
+        * `if delta < -TRACKING_THRESHOLD`: If the object is significantly to the *left* (delta is more negative than the negative threshold).
+            * `if current_pos < NECK_MAX_POS`: Checks if the neck is not already at its maximum *right* limit.
+            * `Servo.Increment(pin, NECK_STEP_SIZE)`: Moves the neck servo to the *right* by `NECK_STEP_SIZE`. The comment correctly notes that to move the camera view to the left (to follow an object that is left of center), the servo itself needs to move to bring the camera view towards the object. The code logic "Move neck Right" is correct for this scenario if "Increment" increases the servo's angular value, and a higher angular value corresponds to the neck pointing more to its right.
+            * `sleep(SLEEP_TIME)`: Pauses.
+        * `elif delta > TRACKING_THRESHOLD`: If the object is significantly to the *right* (delta is more positive than the threshold).
+            * `if current_pos > NECK_MIN_POS`: Checks if the neck is not already at its maximum *left* limit.
+            * `Servo.Decrement(pin, NECK_STEP_SIZE)`: Moves the neck servo to the *left* by `NECK_STEP_SIZE`.
+            * `sleep(SLEEP_TIME)`: Pauses.
+        * `else`: If the object is within the `TRACKING_THRESHOLD` (i.e., considered centered), it does nothing (`pass`).
+
+#### 4.2.2. Main Program Logic (`# --- Main Program Logic ---`)
+
+* **Initialization**:
+    * `initialize_neck(NECK_SERVO_PIN, INITIAL_NECK_POS, NECK_SPEED)`: Calls the initialization function once at the start to set up the neck servo.
+* **Tracking Loop**:
+    * `print("Starting tracking loop...")`
+    * `try...except KeyboardInterrupt`: This structure allows the program to run an infinite loop but be stopped gracefully by pressing `Ctrl+C` on the keyboard.
+    * `while True:`: This creates an infinite loop, meaning the tracking logic will run continuously until the program is interrupted.
+        * `if getVar("$CameraIsTracking")`: Checks a system variable (presumably from the environment the script is running in, like a robot's operating system or a specific vision processing software). This variable indicates whether the camera system is currently successfully tracking any object.
+            * `obj_x = getVar("$CameraObjectCenterX")`: If the camera is tracking, it retrieves another system variable, `$CameraObjectCenterX`, which is assumed to hold the horizontal coordinate of the tracked object's center.
+            * `if obj_x is not None`: Checks if a valid x-coordinate was retrieved.
+                * `adjust_neck_for_tracking(NECK_SERVO_PIN, obj_x)`: Calls the function to adjust the neck servo based on the object's position.
+            * `else`: If `obj_x` couldn't be retrieved, it prints a warning.
+        * The commented-out `else` block for `if getVar("$CameraIsTracking")` suggests an optional small delay if the camera is not tracking, to reduce CPU usage by not looping too rapidly.
+* **Graceful Exit**:
+    * `except KeyboardInterrupt:`: If `Ctrl+C` is pressed.
+        * `print("\nExiting program due to user request.")`: Informs the user.
+        * The commented-out lines suggest optional cleanup actions, like returning the servo to its initial position before exiting.
+
+#### Assumptions and Dependencies:
+
+* **Servo Library**: The code relies on an external `Servo` object or module that is provided by the "arc" ez robot software. 
+* **`sleep()` function**: It uses a `sleep()` function to pause execution. The argument is in milliseconds.
+* **`getVar()` function**: This function is used to read variables from the system or environment where the script is running (e.g., `$CameraIsTracking`, `$CameraObjectCenterX`). Implmenetaion provided by "ARC"
+* **`D2`**: This implies a hardware context where `D2` is a recognized identifier for a digital pin.
+
