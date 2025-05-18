@@ -85,7 +85,7 @@ The head tracking system uses the left eye camera to identify and follow objects
 can be found in "eyeTracking.py"
 
 
-4.2. Code Explanation
+### 4.2. Code Explanation
 Constants:
 NECK_SERVO_PIN: Specifies the digital port (D2) for the head pivot servo.
 INITIAL_NECK_POS: The default starting position (94) for the neck pivot.
